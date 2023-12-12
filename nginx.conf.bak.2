@@ -1,0 +1,315 @@
+user  nginx;
+worker_processes  3;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/conf.d/*.conf;
+
+    ############################################
+    # services to SSL terminate
+    ############################################
+
+
+    # upgrade websocket connections following: https://www.nginx.com/blog/websocket-nginx/
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    ############################################
+    # pg admin 4 section
+    upstream pg-admin-ws-http {
+        server otaya-pg-admin-4:80;
+    }
+
+    server {
+        listen 80;
+        server_name pgadmin.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           pgadmin.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/pgadmin.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/pgadmin.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        client_max_body_size 100G;
+
+        location / {
+            proxy_pass http://pg-admin-ws-http;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }
+     }
+
+    ############################################
+    # metabase section
+    upstream metabase-ws-http {
+        server metabase:3000;
+    }
+
+    server {
+        listen 80;
+        server_name metabase.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           metabase.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/metabase.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/metabase.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://metabase-ws-http;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }
+     }
+
+
+    ############################################
+    # wiki section
+    upstream wiki-websocket-http {
+        # TODO switch back to docker network forwarding
+        server wiki-js-server:80;
+        # server docker-host-01.mfg.otaya.cc:3000;
+    }
+
+    server {
+        listen 80;
+        server_name wiki.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           wiki.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/wiki.mfg.otaya.cc-0001/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/wiki.mfg.otaya.cc-0001/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        proxy_connect_timeout       120;
+        proxy_send_timeout          120;
+        proxy_read_timeout          120;
+        send_timeout                120;
+
+
+        location / {
+            proxy_pass http://wiki-websocket-http;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+        }    
+     }
+
+    ############################################
+    # munin monitoring section
+    upstream munin-http {
+        server munin-server:8080;
+    }
+
+    server {
+        listen 80;
+        server_name munin.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           munin.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/munin.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/munin.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://munin-http;
+            proxy_http_version 1.1;
+        }    
+     }
+
+    ############################################
+    # portainer section
+    upstream portainer-http {
+        server portainer:9000;
+    }
+
+    server {
+        listen 80;
+        server_name portainer.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           portainer.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/portainer.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/portainer.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://portainer-http;
+            proxy_http_version 1.1;
+        }    
+     }
+
+    ############################################
+#    # docker-registry section
+#    upstream docker-registry-http {
+#        server docker-registry:5000;
+#    }
+
+#    server {
+#        listen 80;
+#        server_name docker-registry.mfg.otaya.cc;
+#        return 301 https://$server_name$request_uri;
+#    }
+
+#    server {
+#        listen               443 ssl;
+#        server_name           docker-registry.mfg.otaya.cc;
+
+#        ssl_certificate       /etc/letsencrypt/live/docker-registry.mfg.otaya.cc/fullchain.pem;
+#        ssl_certificate_key   /etc/letsencrypt/live/docker-registry.mfg.otaya.cc/privkey.pem;
+#        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+#        ssl_ciphers           HIGH:!aNULL:!MD5;
+#        ssl_session_cache     shared:SSL:2m;
+
+#        location / {
+#            proxy_pass http://docker-registry-http;
+#            proxy_http_version 1.1;
+#        }
+#     }
+
+    ############################################
+    # campaign-tools section
+    upstream campaign-tools-http {
+        server campaign-tools:3000;
+    }
+
+    server {
+        listen 80;
+        server_name campaign-tools.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           campaign-tools.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/campaign-tools.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/campaign-tools.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://campaign-tools-http;
+            proxy_http_version 1.1;
+        }
+     }
+
+
+    ############################################
+    # mongo-express section
+    upstream mongo-express-http {
+        server mongo-express:8081;
+    }
+
+    server {
+        listen 80;
+        server_name mongo-express.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           mongo-express.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/mongo-express.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/mongo-express.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://mongo-express-http;
+            proxy_http_version 1.1;
+        }
+     }
+
+
+
+    ############################################
+    # design-db section
+    upstream design-db-http {
+        server design-db:80;
+    }
+
+    server {
+        listen 80;
+        server_name design-db.mfg.otaya.cc;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen               443 ssl;
+        server_name           design-db.mfg.otaya.cc;
+
+        ssl_certificate       /etc/letsencrypt/live/design-db.mfg.otaya.cc/fullchain.pem;
+        ssl_certificate_key   /etc/letsencrypt/live/design-db.mfg.otaya.cc/privkey.pem;
+        ssl_protocols         SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers           HIGH:!aNULL:!MD5;
+        ssl_session_cache     shared:SSL:2m;
+
+        location / {
+            proxy_pass http://design-db-http;
+            proxy_http_version 1.1;
+        }
+     }
+}
