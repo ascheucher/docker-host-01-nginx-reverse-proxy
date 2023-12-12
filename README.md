@@ -1,5 +1,12 @@
 # the nginx reverse proxy
 
+## install to systemd
+
+```
+cp docker-compose-ephemeral@.service /etc/systemd/system
+sudo systemctl enable docker-compose-ephemeral@nginx-reverse-proxy.service
+```
+
 ## normal start and stop
 
 ```
